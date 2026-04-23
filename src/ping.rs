@@ -1,22 +1,22 @@
 use std::{
     io::{BufReader, BufWriter, Read, Write},
-    net::{TcpStream, UdpSocket},
+    net::{SocketAddr, SocketAddrV4, TcpStream, UdpSocket},
 };
 
 use anyhow::{Result};
 
 use crate::{packet::Packet, reader::Reader, writer::Writer};
 
-pub fn ping_server(address: &str, port: u16) -> Result<Vec<u8>> {
-    let stream = TcpStream::connect(format!("{address}:{port}"))?;
+pub fn ping_server(address: &SocketAddr) -> Result<Vec<u8>> {
+    let stream = TcpStream::connect(address)?;
 
     let mut writer = BufWriter::new(&stream);
     let mut reader = BufReader::new(&stream);
 
     writer.write_packet(&Packet::Handshake {
         version: 776,
-        address: address.into(),
-        port,
+        address: "".into(), // Unused by vanilla servers
+        port: 25565, // Unused by vanilla servers
         state: 1,
     })?;
     writer.write_packet(&Packet::StatusRequest)?;
@@ -30,8 +30,8 @@ pub fn ping_server(address: &str, port: u16) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
-pub fn is_server_on(address: &str, port: u16) -> bool {
-    TcpStream::connect(format!("{address}:{port}")).is_ok()
+pub fn is_server_on(address: &SocketAddr) -> bool {
+    TcpStream::connect(address).is_ok()
 }
 
 pub fn send_wol(mac_address: &[u8; 6]) -> Result<()> {

@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::{
     env,
     io::{BufReader, BufWriter, Write},
-    net::{TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream}, sync::Arc,
 };
 
 use crate::{
@@ -25,11 +25,13 @@ fn main() -> Result<()> {
     let host_address = env::var("HOST_ADDRESS").unwrap_or("0.0.0.0".into());
     let host_port = env::var("HOST_PORT").unwrap_or("25565".into());
 
-    let server_address = env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS is empty.");
+    let server_address = Arc::from(env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS is empty."));
     let server_port = env::var("SERVER_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(25565);
+
+    let socket_address: SocketAddr = env::var("SERVER_IP").unwrap_or(format!("{server_address}:{server_port}")).parse().expect("Server address or port is invalid.");
 
     let mac_address = mac_address_from_str(
         &env::var("SERVER_MAC_ADDRESS").expect("SERVER_MAC_ADDRESS is empty."),
@@ -45,12 +47,9 @@ fn main() -> Result<()> {
             continue;
         };
 
-        let Ok(ip) = stream.peer_addr() else {
-            continue;
-        };
-        println!("Request from {ip}");
+        let _ = stream.peer_addr().inspect(|ip| println!("Request from {ip}"));
 
-        let server_address = server_address.clone();
+        let server_address = Arc::clone(&server_address);
 
         std::thread::spawn(move || {
             let mut reader = BufReader::new(&stream);
@@ -75,11 +74,11 @@ fn main() -> Result<()> {
                         Ok(false)
                     }
                     Packet::StatusRequest => {
-                        send_status(&mut writer, &server_address, server_port, v)
+                        send_status(&mut writer, &socket_address, v)
                     }
                     Packet::Ping(payload) => send_pong(&mut writer, payload),
                     Packet::Login(name, uuid) => {
-                        if is_server_on(&server_address, server_port) {
+                        if is_server_on(&socket_address) {
                             next_state = Some(4);
                             send_login_success(&mut writer, name, *uuid)
                         } else {
@@ -89,7 +88,7 @@ fn main() -> Result<()> {
                     }
 
                     Packet::Unknown if next_state == Some(4) => {
-                        send_transfer(&mut writer, &server_address, server_port)
+                        send_transfer(&mut writer, &server_address, server_port as u16)
                     }
                     _ => Ok(false),
                 };
@@ -149,11 +148,10 @@ fn send_pong(stream: &mut BufWriter<&TcpStream>, payload: i64) -> Result<bool> {
 
 fn send_status(
     writer: &mut BufWriter<&TcpStream>,
-    address: &str,
-    port: u16,
+    address: &SocketAddr,
     version: i64,
 ) -> Result<bool> {
-    if let Ok(response) = ping_server(address, port).inspect_err(|e| eprintln!("{e}")) {
+    if let Ok(response) = ping_server(address).inspect_err(|e| eprintln!("{e}")) {
         writer.write_varint(response.len() as u64)?;
         writer.write_all(&response)?;
     } else {
