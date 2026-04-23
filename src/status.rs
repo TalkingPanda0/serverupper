@@ -1,34 +1,34 @@
-use serde::{Deserialize, Serialize};
+use serde::{Serialize};
 
 use crate::text::{Text, TextColor};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct Version {
     pub name: String,
     pub protocol: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct Player {
     pub name: String,
     pub id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct Players {
     pub max: i64,
     pub online: i64,
     pub sample: Option<Vec<Player>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize,  Debug)]
 #[serde(untagged)]
 pub enum Description {
     String(String),
     Text(Text),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize,  Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub version: Version,

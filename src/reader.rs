@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Result, bail};
 
-use crate::{packet::Packet, status::Status};
+use crate::{packet::Packet};
 
 const SEGMENT_BITS: u8 = 0x7F;
 const CONTINUE_BIT: u8 = 0x80;
@@ -20,8 +20,6 @@ pub trait Reader {
     fn read_string(&mut self) -> Result<String>;
 
     fn read_packet(&mut self, next_state: Option<i64>) -> Result<Packet>;
-    fn read_clientbound_packet(&mut self) -> Result<Packet>;
-    fn read_status_response(&mut self) -> Result<Packet>;
     fn read_handshake(&mut self) -> Result<Packet>;
     fn read_login(&mut self) -> Result<Packet>;
 }
@@ -97,29 +95,13 @@ impl Reader for BufReader<&TcpStream> {
             0x03 => Ok(Packet::LoginAcknowledged),
             n => {
                 let left = length - id_length;
-                /*let mut buf = vec![0u8; left as usize];
-                self.read_exact(&mut buf)?;
-                println!("{:#04X?}", buf);*/
                 std::io::copy(&mut self.by_ref().take(left as u64), &mut std::io::sink())?;
                 eprintln!("Unsupported packet id {n}");
                 Ok(Packet::Unknown)
             }
         }
     }
-    fn read_clientbound_packet(&mut self) -> Result<Packet> {
-        let _length = self.read_varint()?;
-        let packet_id = self.read_varint()?;
-        if packet_id != 0 {
-            bail!("Got a non status response client bound packet with id: {packet_id}");
-        }
-        self.read_status_response()
-    }
-
-    fn read_status_response(&mut self) -> Result<Packet> {
-        let status: Status = serde_json::from_str(&self.read_string()?)?;
-
-        Ok(Packet::StatusResponse(Box::new(status)))
-    }
+ 
 
     fn read_handshake(&mut self) -> Result<Packet> {
         let version = self.read_varint()?;

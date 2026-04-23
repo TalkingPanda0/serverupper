@@ -37,7 +37,8 @@ fn main() -> Result<()> {
 
     let address = format!("{host_address}:{host_port}");
     let listener = TcpListener::bind(&address)?;
-    println!("Listening on {address}.");
+    println!("Listening on {address}");
+    println!("Target server: {server_address}:{server_port}");
 
     for stream in listener.incoming() {
         let Ok(stream) = stream else {
@@ -152,14 +153,14 @@ fn send_status(
     port: u16,
     version: i64,
 ) -> Result<bool> {
-    let status = if let Ok(Packet::StatusResponse(response)) =
-        ping_server(address, port).inspect_err(|e| eprintln!("{e}"))
-    {
-        response
+    if let Ok(response) = ping_server(address, port).inspect_err(|e| eprintln!("{e}")) {
+        writer.write_varint(response.len() as u64)?;
+        writer.write_all(&response)?;
     } else {
-        Box::new(get_offline_status(version))
+        writer.write_packet(&Packet::StatusResponse(Box::new(get_offline_status(
+            version,
+        ))))?;
     };
 
-    writer.write_packet(&Packet::StatusResponse(status))?;
     Ok(false)
 }

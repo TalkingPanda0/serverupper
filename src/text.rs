@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::{Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum TextType {
     Text,
@@ -11,7 +11,7 @@ pub enum TextType {
     Nbt,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TextColor {
     Black,
@@ -34,7 +34,7 @@ pub enum TextColor {
     Hex(String),
 }
 
-#[derive(Serialize, Deserialize, Debug,Default)]
+#[derive(Serialize, Debug,Default)]
 pub struct Text {
     pub text: Option<String>,
     pub atlas: Option<String>,
