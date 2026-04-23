@@ -121,6 +121,6 @@ impl Reader for BufReader<&TcpStream> {
         let name = self.read_string()?;
         let uuid = self.read_uuid()?;
 
-        Ok(Packet::Login(name, uuid))
+        Ok(Packet::Login(name, uuid.into()))
     }
 }

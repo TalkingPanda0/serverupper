@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    packet::Packet,
+    packet::{Packet},
     ping::{is_server_on, ping_server, send_wol},
     reader::Reader,
     status::get_offline_status,
@@ -81,7 +81,7 @@ fn main() -> Result<()> {
                     Packet::Login(name, uuid) => {
                         if is_server_on(&server_address, server_port) {
                             next_state = Some(4);
-                            send_login_success(&mut writer, name, uuid)
+                            send_login_success(&mut writer, name, *uuid)
                         } else {
                             next_state = Some(5);
                             send_kick(&mut writer)
@@ -138,7 +138,7 @@ fn send_login_success(
     name: String,
     uuid: u128,
 ) -> Result<bool> {
-    stream.write_packet(&Packet::LoginSuccess(uuid, name))?;
+    stream.write_packet(&Packet::LoginSuccess(uuid.into(), name))?;
     Ok(false)
 }
 

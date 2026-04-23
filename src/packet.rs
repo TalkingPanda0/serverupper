@@ -1,8 +1,20 @@
-use std::io::Write;
+use std::{fmt::{Debug, Formatter}, io::Write};
 
 use anyhow::Result;
-
 use crate::{status::Status, text::Text, writer::Writer};
+use derive_more::{Deref,From};
+
+
+#[derive(Deref,From)]
+pub struct UUID(pub u128);
+
+impl Debug for UUID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:x}", self.0))
+    }
+}
+
+
 
 #[derive(Debug)]
 pub enum Packet {
@@ -14,11 +26,11 @@ pub enum Packet {
     },
     StatusResponse(Box<Status>),
     Ping(i64),
-    Login(String,u128),
-    LoginSuccess(u128,String),
+    Login(String, UUID),
+    LoginSuccess(UUID, String),
     LoginAcknowledged,
     StatusRequest,
-    Transfer(String,u64),
+    Transfer(String, u64),
     Disconnect(Text),
     Unknown,
 }
@@ -34,17 +46,22 @@ impl Packet {
             Self::Ping(payload) => {
                 buffer.write_all(&payload.to_be_bytes())?;
             }
-            Self::LoginSuccess(uuid, name ) => {
-                buffer.write_uuid(*uuid)?;
+            Self::LoginSuccess(uuid, name) => {
+                buffer.write_uuid(uuid)?;
                 buffer.write_string(name)?;
                 buffer.write_varint(0)?;
-            },
-            Self::Transfer(host,port ) => {
+            }
+            Self::Transfer(host, port) => {
                 buffer.write_string(host)?;
                 buffer.write_varint(*port)?;
             }
 
-            Self::Handshake { version, address, port, state } => {
+            Self::Handshake {
+                version,
+                address,
+                port,
+                state,
+            } => {
                 buffer.write_varint(*version as u64)?;
                 buffer.write_string(address)?;
                 buffer.write_u16(*port)?;
@@ -55,7 +72,7 @@ impl Packet {
                 buffer.write_string(&serde_json::to_string(text)?)?;
             }
 
-           Self::Unknown | Self::LoginAcknowledged | Self::Login(..) | Self::StatusRequest => (),
+            Self::Unknown | Self::LoginAcknowledged | Self::Login(..) | Self::StatusRequest => (),
         }
 
         Ok(buffer)

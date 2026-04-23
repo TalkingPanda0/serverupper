@@ -2,7 +2,7 @@ use std::io::Write;
 
 use anyhow::Result;
 
-use crate::packet::Packet;
+use crate::packet::{Packet};
 
 const SEGMENT_BITS: u64 = 0x7F;
 const CONTINUE_BIT: u64 = 0x80;
@@ -12,7 +12,7 @@ pub trait Writer {
     fn write_u16(&mut self, value: u16) -> Result<()>;
 
     fn write_varint(&mut self, value: u64) -> Result<()>;
-    fn write_uuid(&mut self, value: u128) -> Result<()>;
+    fn write_uuid(&mut self, value: &u128) -> Result<()>;
     fn write_string(&mut self, value: &str) -> Result<()>;
 
     fn write_packet(&mut self, packet: &Packet) -> Result<()>;
@@ -46,7 +46,7 @@ impl<T: Write> Writer for T {
         Ok(())
     }
 
-    fn write_uuid(&mut self, value: u128) -> Result<()> {
+    fn write_uuid(&mut self, value: &u128) -> Result<()> {
         self.write_all(&value.to_be_bytes())?;
         Ok(())
     }
