@@ -36,7 +36,7 @@ pub enum Packet {
 }
 
 impl Packet {
-    pub fn bytes(&self) -> Result<Vec<u8>> {
+    pub fn bytes(&self, version: i64) -> Result<Vec<u8>> {
         let mut buffer = Vec::new();
 
         match self {
@@ -50,6 +50,10 @@ impl Packet {
                 buffer.write_uuid(uuid)?;
                 buffer.write_string(name)?;
                 buffer.write_varint(0)?;
+                if version < 768 && version > 765  {
+                    // Stricterrorhandling added on 1.20.5 removed on 1.21.2
+                    buffer.write_u8(0)?;
+                }
             }
             Self::Transfer(host, port) => {
                 buffer.write_string(host)?;

@@ -15,7 +15,7 @@ pub trait Writer {
     fn write_uuid(&mut self, value: &u128) -> Result<()>;
     fn write_string(&mut self, value: &str) -> Result<()>;
 
-    fn write_packet(&mut self, packet: &Packet) -> Result<()>;
+    fn write_packet(&mut self, packet: &Packet,version: i64) -> Result<()>;
 }
 
 impl<T: Write> Writer for T {
@@ -51,8 +51,8 @@ impl<T: Write> Writer for T {
         Ok(())
     }
 
-    fn write_packet(&mut self, packet: &Packet) -> Result<()> {
-        let packet_data = packet.bytes()?;
+    fn write_packet(&mut self, packet: &Packet,version: i64) -> Result<()> {
+        let packet_data = packet.bytes(version)?;
         let mut packet_id: Vec<u8> = Vec::new();
         packet_id.write_varint(packet.packet_id() as u64)?;
         let length = packet_data.iter().len() + packet_id.len();

@@ -2,11 +2,12 @@ use anyhow::Result;
 use std::{
     env,
     io::{BufReader, BufWriter, Write},
-    net::{SocketAddr, TcpListener, TcpStream}, sync::Arc,
+    net::{SocketAddr, TcpListener, TcpStream},
+    sync::Arc,
 };
 
 use crate::{
-    packet::{Packet},
+    packet::Packet,
     ping::{is_server_on, ping_server, send_wol},
     reader::Reader,
     status::get_offline_status,
@@ -31,7 +32,10 @@ fn main() -> Result<()> {
         .and_then(|p| p.parse().ok())
         .unwrap_or(25565);
 
-    let socket_address: SocketAddr = env::var("SERVER_IP").unwrap_or(format!("{server_address}:{server_port}")).parse().expect("Server address or port is invalid.");
+    let socket_address: SocketAddr = env::var("SERVER_IP")
+        .unwrap_or(format!("{server_address}:{server_port}"))
+        .parse()
+        .expect("Server address or port is invalid.");
 
     let mac_address = mac_address_from_str(
         &env::var("SERVER_MAC_ADDRESS").expect("SERVER_MAC_ADDRESS is empty."),
@@ -47,7 +51,9 @@ fn main() -> Result<()> {
             continue;
         };
 
-        let _ = stream.peer_addr().inspect(|ip| println!("Request from {ip}"));
+        let _ = stream
+            .peer_addr()
+            .inspect(|ip| println!("Request from {ip}"));
 
         let server_address = Arc::clone(&server_address);
 
@@ -73,22 +79,25 @@ fn main() -> Result<()> {
                         next_state = Some(state);
                         Ok(false)
                     }
-                    Packet::StatusRequest => {
-                        send_status(&mut writer, &socket_address, v)
-                    }
-                    Packet::Ping(payload) => send_pong(&mut writer, payload),
+                    Packet::StatusRequest => send_status(&mut writer, &socket_address, v),
+                    Packet::Ping(payload) => send_pong(&mut writer, payload,v),
                     Packet::Login(name, uuid) => {
                         if is_server_on(&socket_address) {
                             next_state = Some(4);
-                            send_login_success(&mut writer, name, *uuid)
+                            send_login_success(&mut writer, name, *uuid,v)
                         } else {
                             next_state = Some(5);
-                            send_kick(&mut writer)
+                            send_kick(&mut writer,v)
                         }
                     }
 
+                    Packet::LoginAcknowledged => {
+                        println!("Login succesfull!");
+                        Ok(false)
+                    }
                     Packet::Unknown if next_state == Some(4) => {
-                        send_transfer(&mut writer, &server_address, server_port as u16)
+                        println!("Transfering client");
+                        send_transfer(&mut writer, &server_address, server_port as u16,v)
                     }
                     _ => Ok(false),
                 };
@@ -120,15 +129,23 @@ fn mac_address_from_str(str: &str) -> [u8; 6] {
     a.try_into().expect("Failed parsing mac_address.")
 }
 
-fn send_kick(stream: &mut BufWriter<&TcpStream>) -> Result<bool> {
-    stream.write_packet(&Packet::Disconnect(Text::literal(
-        "Server is currently offline. Please wait while the server starts up.",
-    )))?;
+fn send_kick(stream: &mut BufWriter<&TcpStream>, version: i64) -> Result<bool> {
+    stream.write_packet(
+        &Packet::Disconnect(Text::literal(
+            "Server is currently offline. Please wait while the server starts up.",
+        )),
+        version,
+    )?;
     Ok(true)
 }
 
-fn send_transfer(stream: &mut BufWriter<&TcpStream>, address: &str, port: u16) -> Result<bool> {
-    stream.write_packet(&Packet::Transfer(address.into(), port.into()))?;
+fn send_transfer(
+    stream: &mut BufWriter<&TcpStream>,
+    address: &str,
+    port: u16,
+    version: i64,
+) -> Result<bool> {
+    stream.write_packet(&Packet::Transfer(address.into(), port.into()), version)?;
     Ok(true)
 }
 
@@ -136,13 +153,14 @@ fn send_login_success(
     stream: &mut BufWriter<&TcpStream>,
     name: String,
     uuid: u128,
+    version: i64,
 ) -> Result<bool> {
-    stream.write_packet(&Packet::LoginSuccess(uuid.into(), name))?;
+    stream.write_packet(&Packet::LoginSuccess(uuid.into(), name), version)?;
     Ok(false)
 }
 
-fn send_pong(stream: &mut BufWriter<&TcpStream>, payload: i64) -> Result<bool> {
-    stream.write_packet(&Packet::Ping(payload))?;
+fn send_pong(stream: &mut BufWriter<&TcpStream>, payload: i64, version: i64) -> Result<bool> {
+    stream.write_packet(&Packet::Ping(payload), version)?;
     Ok(true)
 }
 
@@ -155,9 +173,10 @@ fn send_status(
         writer.write_varint(response.len() as u64)?;
         writer.write_all(&response)?;
     } else {
-        writer.write_packet(&Packet::StatusResponse(Box::new(get_offline_status(
+        writer.write_packet(
+            &Packet::StatusResponse(Box::new(get_offline_status(version))),
             version,
-        ))))?;
+        )?;
     };
 
     Ok(false)
