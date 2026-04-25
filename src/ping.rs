@@ -18,8 +18,8 @@ pub fn ping_server(address: &SocketAddr) -> Result<Vec<u8>> {
         address: "".into(), // Unused by vanilla servers
         port: 25565, // Unused by vanilla servers
         state: 1,
-    })?;
-    writer.write_packet(&Packet::StatusRequest)?;
+    },776)?;
+    writer.write_packet(&Packet::StatusRequest,776)?;
     writer.flush()?;
 
     let length = reader.read_varint()?;

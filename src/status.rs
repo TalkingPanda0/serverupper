@@ -42,6 +42,7 @@ pub struct Status {
 }
 
 pub fn get_offline_status(version: i64) -> Status {
+    let version = version.max(766);
     let description = Description::Text(
         Text::literal("HII ")
             .with_color(TextColor::Hex("#048ac7".into()))
@@ -51,7 +52,7 @@ pub fn get_offline_status(version: i64) -> Status {
     );
     Status {
         version: Version {
-            name: "Your Version".into(),
+            name: "1.20.5+".into(),
             protocol: version,
         },
         players: Players {
