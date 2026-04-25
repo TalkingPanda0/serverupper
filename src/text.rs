@@ -1,4 +1,5 @@
 use serde::{Serialize};
+use serde_with::skip_serializing_none;
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +35,7 @@ pub enum TextColor {
     Hex(String),
 }
 
+#[skip_serializing_none]
 #[derive(Serialize, Debug,Default)]
 pub struct Text {
     pub text: Option<String>,

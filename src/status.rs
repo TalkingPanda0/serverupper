@@ -1,4 +1,5 @@
 use serde::{Serialize};
+use serde_with::skip_serializing_none;
 
 use crate::text::{Text, TextColor};
 
@@ -14,6 +15,7 @@ pub struct Player {
     pub id: String,
 }
 
+#[skip_serializing_none]
 #[derive(Serialize, Debug)]
 pub struct Players {
     pub max: i64,
@@ -28,6 +30,7 @@ pub enum Description {
     Text(Text),
 }
 
+#[skip_serializing_none]
 #[derive(Serialize,  Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {

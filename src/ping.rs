@@ -1,6 +1,6 @@
 use std::{
     io::{BufReader, BufWriter, Read, Write},
-    net::{SocketAddr, SocketAddrV4, TcpStream, UdpSocket},
+    net::{SocketAddr, TcpStream, UdpSocket},
 };
 
 use anyhow::{Result};
