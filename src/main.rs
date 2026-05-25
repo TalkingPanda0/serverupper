@@ -3,7 +3,8 @@ use std::{
     env,
     io::{BufReader, BufWriter, Write},
     net::{SocketAddr, TcpListener, TcpStream},
-    sync::Arc,
+    sync::{Arc, RwLock},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::{
@@ -25,8 +26,10 @@ pub mod writer;
 fn main() -> Result<()> {
     let host_address = env::var("HOST_ADDRESS").unwrap_or("0.0.0.0".into());
     let host_port = env::var("HOST_PORT").unwrap_or("25565".into());
+    let admin_address = env::var("ADMIN_ADDRESS").unwrap_or(host_address.clone());
+    let admin_port = env::var("ADMIN_PORT").unwrap_or("3000".into());
 
-    let server_address = Arc::from(env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS is empty."));
+    let server_address = Arc::new(env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS is empty."));
     let server_port = env::var("SERVER_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
@@ -40,6 +43,46 @@ fn main() -> Result<()> {
     let mac_address = mac_address_from_str(
         &env::var("SERVER_MAC_ADDRESS").expect("SERVER_MAC_ADDRESS is empty."),
     );
+
+    let last_wol: Arc<RwLock<Option<SystemTime>>> = Arc::new(RwLock::new(None));
+
+    let last_wol_clone = last_wol.clone();
+    std::thread::spawn(move || {
+        let address = format!("{admin_address}:{admin_port}");
+
+        let listener = TcpListener::bind(&address)
+            .unwrap_or_else(|_| panic!("Failed to listen on port {admin_port}"));
+        println!("Listening for admin on {address}");
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+            let last_wol = *last_wol_clone.read().unwrap();
+
+            let response = if let Some(last_wol) = last_wol 
+                && let Ok(duration) = last_wol.duration_since(UNIX_EPOCH)
+            {
+                let body = duration.as_secs().to_string();
+                format!(
+                    "HTTP/1.1 200 OK\r\n\
+                    Content-Length: {}\r\n\
+                    Connection: close\r\n\
+                    \r\n\
+                    {body}",
+                    body.len()
+                )
+            } else {
+                "HTTP/1.1 404 Not Found\r\n\
+                Content-Length: 0\r\n\
+                Connection: close\r\n\
+                \r\n"
+                    .to_string()
+            };
+            if let Err(err) = stream.write_all(response.as_bytes()) {
+                eprintln!("Failed sending last_wol: {err}");
+            }
+        }
+    });
 
     let address = format!("{host_address}:{host_port}");
     let listener = TcpListener::bind(&address)?;
@@ -57,6 +100,7 @@ fn main() -> Result<()> {
 
         let server_address = Arc::clone(&server_address);
 
+        let last_wol = last_wol.clone();
         std::thread::spawn(move || {
             let mut reader = BufReader::new(&stream);
             let mut writer = BufWriter::new(&stream);
@@ -80,14 +124,14 @@ fn main() -> Result<()> {
                         Ok(false)
                     }
                     Packet::StatusRequest => send_status(&mut writer, &socket_address, v),
-                    Packet::Ping(payload) => send_pong(&mut writer, payload,v),
+                    Packet::Ping(payload) => send_pong(&mut writer, payload, v),
                     Packet::Login(name, uuid) => {
                         if is_server_on(&socket_address) {
                             next_state = Some(4);
-                            send_login_success(&mut writer, name, *uuid,v)
+                            send_login_success(&mut writer, name, *uuid, v)
                         } else {
                             next_state = Some(5);
-                            send_kick(&mut writer,v)
+                            send_kick(&mut writer, v)
                         }
                     }
 
@@ -97,7 +141,7 @@ fn main() -> Result<()> {
                     }
                     Packet::Unknown if next_state == Some(4) => {
                         println!("Transfering client");
-                        send_transfer(&mut writer, &server_address, server_port as u16,v)
+                        send_transfer(&mut writer, &server_address, server_port as u16, v)
                     }
                     _ => Ok(false),
                 };
@@ -111,8 +155,13 @@ fn main() -> Result<()> {
                 }
             }
 
-            if next_state == Some(5) {
-                let _ = send_wol(&mac_address).inspect_err(|err| eprintln!("{err}"));
+            if next_state == Some(5)
+                && send_wol(&mac_address)
+                    .inspect_err(|err| eprintln!("{err}"))
+                    .is_ok()
+            {
+                let mut last_wol = last_wol.write().unwrap(); 
+                *last_wol = Some(SystemTime::now());
             }
         });
     }
