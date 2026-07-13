@@ -1,11 +1,13 @@
-use std::{fmt::{Debug, Formatter}, io::Write};
+use std::{
+    fmt::{Debug, Formatter},
+    io::Write,
+};
 
-use anyhow::Result;
 use crate::{status::Status, text::Text, writer::Writer};
-use derive_more::{Deref,From};
+use anyhow::Result;
+use derive_more::{Deref, From};
 
-
-#[derive(Deref,From)]
+#[derive(Deref, From)]
 pub struct UUID(pub u128);
 
 impl Debug for UUID {
@@ -13,8 +15,6 @@ impl Debug for UUID {
         f.write_fmt(format_args!("{:x}", self.0))
     }
 }
-
-
 
 #[derive(Debug)]
 pub enum Packet {
@@ -50,9 +50,12 @@ impl Packet {
                 buffer.write_uuid(uuid)?;
                 buffer.write_string(name)?;
                 buffer.write_varint(0)?;
-                if version < 768 && version > 765  {
+                if version < 768 && version > 765 {
                     // Stricterrorhandling added on 1.20.5 removed on 1.21.2
                     buffer.write_u8(0)?;
+                } else if version >= 776 {
+                    // Server Session ID added in 26.2
+                    buffer.write_uuid(&0)?;
                 }
             }
             Self::Transfer(host, port) => {
