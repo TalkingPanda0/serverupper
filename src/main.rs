@@ -4,7 +4,7 @@ use std::{
     io::{BufReader, BufWriter, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, RwLock},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use crate::{
@@ -57,6 +57,11 @@ fn main() -> Result<()> {
             let Ok(mut stream) = stream else {
                 continue;
             };
+
+            if stream.set_read_timeout(Some(Duration::from_secs(30))).is_err() {
+                continue;
+            }
+
             let last_wol = *last_wol_clone.read().unwrap();
 
             let response = if let Some(last_wol) = last_wol 
