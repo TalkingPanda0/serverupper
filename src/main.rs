@@ -1,11 +1,15 @@
 use anyhow::Result;
+use serde::Deserialize;
 use std::{
+    collections::HashMap,
     env,
+    fs::{File},
     io::{BufReader, BufWriter, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use uuid::Uuid;
 
 use crate::{
     packet::Packet,
@@ -22,6 +26,31 @@ pub mod reader;
 pub mod status;
 pub mod text;
 pub mod writer;
+
+#[derive(Deserialize)]
+struct StoredWhitelistedPlayer {
+    pub uuid: String,
+    pub name: String,
+}
+
+fn get_whitelist() -> Option<HashMap<u128, String>> {
+    let file = File::open("./whitelist.json").ok()?;
+    let whitelist: Box<[StoredWhitelistedPlayer]> =
+        serde_json::from_reader(BufReader::new(file)).ok()?;
+
+    let whitelist = whitelist
+        .into_iter()
+        .filter_map(|whitelist| {
+            let uuid = Uuid::parse_str(&whitelist.uuid)
+                .map(|uuid| uuid.as_u128())
+                .ok()?;
+
+            Some((uuid, whitelist.name))
+        })
+        .collect();
+
+    Some(whitelist)
+}
 
 fn main() -> Result<()> {
     let host_address = env::var("HOST_ADDRESS").unwrap_or("0.0.0.0".into());
@@ -47,6 +76,9 @@ fn main() -> Result<()> {
     let last_wol: Arc<RwLock<Option<SystemTime>>> = Arc::new(RwLock::new(None));
 
     let last_wol_clone = last_wol.clone();
+
+    let whitelist = Arc::new(get_whitelist());
+
     std::thread::spawn(move || {
         let address = format!("{admin_address}:{admin_port}");
 
@@ -58,13 +90,16 @@ fn main() -> Result<()> {
                 continue;
             };
 
-            if stream.set_read_timeout(Some(Duration::from_secs(30))).is_err() {
+            if stream
+                .set_read_timeout(Some(Duration::from_secs(30)))
+                .is_err()
+            {
                 continue;
             }
 
             let last_wol = *last_wol_clone.read().unwrap();
 
-            let response = if let Some(last_wol) = last_wol 
+            let response = if let Some(last_wol) = last_wol
                 && let Ok(duration) = last_wol.duration_since(UNIX_EPOCH)
             {
                 let body = duration.as_secs().to_string();
@@ -106,6 +141,9 @@ fn main() -> Result<()> {
         let server_address = Arc::clone(&server_address);
 
         let last_wol = last_wol.clone();
+
+        let whitelist = Arc::clone(&whitelist);
+
         std::thread::spawn(move || {
             let mut reader = BufReader::new(&stream);
             let mut writer = BufWriter::new(&stream);
@@ -131,7 +169,10 @@ fn main() -> Result<()> {
                     Packet::StatusRequest => send_status(&mut writer, &socket_address, v),
                     Packet::Ping(payload) => send_pong(&mut writer, payload, v),
                     Packet::Login(name, uuid) => {
-                        if is_server_on(&socket_address) {
+                        if let Some(ref w) = *whitelist && w.get(&uuid).is_none_or(|n| name != *n) {
+                                println!("{name}, {uuid:?} not in whitelist.");
+                                send_kick(&mut writer, v)
+                        } else if is_server_on(&socket_address) {
                             next_state = Some(4);
                             send_login_success(&mut writer, name, *uuid, v)
                         } else {
@@ -165,7 +206,7 @@ fn main() -> Result<()> {
                     .inspect_err(|err| eprintln!("{err}"))
                     .is_ok()
             {
-                let mut last_wol = last_wol.write().unwrap(); 
+                let mut last_wol = last_wol.write().unwrap();
                 *last_wol = Some(SystemTime::now());
             }
         });
